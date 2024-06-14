@@ -1,0 +1,607 @@
+---
+title: "Homework 1"
+format: html
+editor: visual
+---
+
+## Exercises
+
+In the tex below, you will find 27 exercises. However, the list will grow as I update the version of this file (i.e., version 1 will be a subset of version 2). Also of note, the list is divided between out-of-class exercises and in-class questions. The datasets in question are scattered across our lecture materials, and sometimes contained in data packages such as `spData`. For everyone's convenience, enclose your answers in a `.qmd` within an R project called `HMW1_your_name.qmd`. Also, inside project create a "data" folder where you will store the datasets involved in the questions.
+
+```{r}
+#necessary libraries
+library(spData)
+library(sf)
+library(dplyr)
+library(terra)
+
+```
+
+### Out-of-class questions
+
+For these exercises we will use the `us_states` and `us_states_df` datasets from the **spData** package. You must have attached the package, and other packages used in the attribute operations lecture (**sf**, **dplyr**, **terra**) with commands such as `library(spData)` before attempting these exercises:
+
+`us_states` is a spatial object (of class `sf`), containing geometry and a few attributes (including name, region, area, and population) of states within the contiguous United States. `us_states_df` is a data frame (of class `data.frame`) containing the name and additional variables (including median income and poverty level, for the years 2010 and 2015) of US states, including Alaska, Hawaii and Puerto Rico. The data comes from the United States Census Bureau, and is documented in `?us_states` and `?us_states_df`.
+
+```{r}
+#here, i included the necessary databases as instructed
+data("us_states")
+data("us_states_df")
+
+```
+
+E1. Create a new object called `us_states_name` that contains only the `NAME` column from the `us_states` object using either base R (`[`) or tidyverse (`select()`) syntax. What is the class of the new object and what makes it geographic?
+
+```{r}
+library(tidyverse)
+us_states_name_tidy <- us_states %>% select(NAME)
+head(us_states_name_tidy)
+```
+
+E2. Select columns from the `us_states` object which contain population data. Obtain the same result using a different command (bonus: try to find three ways of obtaining the same result). Hint: try to use helper functions, such as `contains` or `matches` from **dplyr** (see `?contains`).
+
+```{r}
+library(dplyr)
+
+us_states_pop1 <- us_states %>% select(contains("pop"))
+head(us_states_pop1)
+
+```
+
+E3. Find all states with the following characteristics (bonus find *and* plot them):
+
+-   Belong to the Midwest region.
+-   Belong to the West region, have an area below 250,000 km^2^ *and* in 2015 a population greater than 5,000,000 residents (hint: you may need to use the function `units::set_units()` or `as.numeric()`).
+-   Belong to the South region, had an area larger than 150,000 km^2^ or a total population in 2015 larger than 7,000,000 residents.
+
+```{r}
+midwest_states <- us_states %>% 
+  filter(REGION == "Midwest")
+
+west_states <- us_states %>% 
+  filter(REGION == "West", AREA < units::set_units(250000, km^2), total_pop_15 > 5000000)
+
+south_states <- us_states %>% 
+  filter(REGION == "South", (AREA > units::set_units(150000, km^2) | total_pop_15 > 7000000))
+
+midwest_states$group <- "Midwest"
+west_states$group <- "West"
+south_states$group <- "South"
+
+
+selected_states <- bind_rows(midwest_states, west_states, south_states)
+
+
+library(ggplot2)
+
+ggplot(data = selected_states) +
+  geom_sf(aes(fill = group), show.legend = "point") + 
+  scale_fill_manual(values = c("Midwest" = "blue", "West" = "green", "South" = "red")) +
+  labs(title = "Selected States by Region and Criteria", 
+       fill = "Region") +
+  theme_minimal()
+
+```
+
+E4. What was the total population in 2015 in the `us_states` dataset? What was the minimum and maximum total population in 2015?
+
+```{r}
+
+total_population_2015 <- sum(us_states$total_pop_15, na.rm = TRUE)
+
+min_population_2015 <- min(us_states$total_pop_15, na.rm = TRUE)
+
+max_population_2015 <- max(us_states$total_pop_15, na.rm = TRUE)
+
+
+cat("Total population in 2015:", total_population_2015, "\n")
+cat("Minimum total population in 2015:", min_population_2015, "\n")
+cat("Maximum total population in 2015:", max_population_2015, "\n")
+
+```
+
+E5. How many states are there in each region?
+
+```{r}
+library(dplyr)
+
+states_per_region <- us_states %>%
+  group_by(REGION) %>%
+  summarise(States_Count = n())
+
+print(states_per_region)
+
+```
+
+E6. What was the minimum and maximum total population in 2015 in each region? What was the total population in 2015 in each region?
+
+```{r}
+library(dplyr)
+
+population_stats_per_region <- us_states %>%
+  group_by(REGION) %>%
+  summarise(
+    Min_Population_2015 = min(total_pop_15, na.rm = TRUE),
+    Max_Population_2015 = max(total_pop_15, na.rm = TRUE),
+    Total_Population_2015 = sum(total_pop_15, na.rm = TRUE)
+  )
+
+print(population_stats_per_region)
+
+```
+
+E7. Add variables from `us_states_df` to `us_states`, and create a new object called `us_states_stats`. What function did you use and why? Which variable is the key in both datasets? What is the class of the new object?
+
+```{r}
+library(dplyr)
+
+us_states_stats <- left_join(us_states, us_states_df, by = c("NAME" = "state"))
+
+class(us_states_stats)
+
+
+```
+
+E8. `us_states_df` has two more rows than `us_states`. How can you find them? (hint: try to use the `dplyr::anti_join()` function)
+
+```{r}
+library(dplyr)
+
+
+extra_rows <- anti_join(us_states_df, us_states, by = c("state" = "NAME"))
+
+
+print(extra_rows)
+
+```
+
+E9. What was the population density in 2015 in each state? What was the population density in 2010 in each state?
+
+```{r}
+
+library(dplyr)
+
+us_states <- us_states %>%
+  mutate(
+    Pop_Density_2015 = total_pop_15 / AREA,
+    Pop_Density_2010 = total_pop_10 / AREA
+  )
+
+head(us_states[, c("NAME", "Pop_Density_2010", "Pop_Density_2015")])
+
+```
+
+E10. How much has population density changed between 2010 and 2015 in each state? Calculate the change in percentages and map them.
+
+```{r}
+library(dplyr)
+library(sf)
+library(ggplot2)
+
+us_states <- us_states %>%
+  mutate(
+    AREA_numeric = as.numeric(AREA), 
+    Pop_Density_2010 = as.numeric(total_pop_10) / AREA_numeric,
+    Pop_Density_2015 = as.numeric(total_pop_15) / AREA_numeric,
+    Density_Percent_Change = ((Pop_Density_2015 - Pop_Density_2010) / Pop_Density_2010) * 100
+  )
+
+ggplot(data = us_states) +
+  geom_sf(aes(fill = Density_Percent_Change), color = "white") +
+  scale_fill_viridis_c(name = "Density Change (%)", labels = scales::percent_format()) +
+  labs(title = "Change in Population Density (2010-2015)", subtitle = "Percentage change by state") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+```
+
+E11. Change the columns' names in `us_states` to lowercase. (Hint: helper functions - `tolower()` and `colnames()` may help.)
+
+```{r}
+
+colnames(us_states) <- tolower(colnames(us_states))
+
+print(colnames(us_states))
+
+```
+
+E12. Using `us_states` and `us_states_df` create a new object called `us_states_sel`. The new object should have only two variables - `median_income_15` and `geometry`. Change the name of the `median_income_15` column to `Income`.
+
+```{r}
+library(dplyr)
+library(sf)
+
+us_states_joined <- left_join(us_states, us_states_df, by = c("name" = "state"))
+
+us_states_sel <- us_states_joined %>%
+  select(median_income_15, geometry) %>%
+  rename(Income = median_income_15)
+
+str(us_states_sel)
+
+```
+
+E13. Calculate the change in the number of residents living below the poverty level between 2010 and 2015 for each state. (Hint: See ?us_states_df for documentation on the poverty level columns.) Bonus: Calculate the change in the *percentage* of residents living below the poverty level in each state.
+
+```{r}
+us_states_poverty_change <- us_states_df %>%
+  mutate(
+    
+    Change_in_Poverty = poverty_level_15 - poverty_level_10,
+    Percent_Change_in_Poverty = ((poverty_level_15 - poverty_level_10) / poverty_level_10) * 100
+  )
+print(select(us_states_poverty_change, state, Change_in_Poverty, Percent_Change_in_Poverty))
+
+
+```
+
+E14. What was the minimum, average and maximum state's number of people living below the poverty line in 2015 for each region? Bonus: What is the region with the largest increase in people living below the poverty line?
+
+```{r}
+library(dplyr)
+
+poverty_stats_2015 <- us_states_stats %>%
+  group_by(REGION) %>%
+  summarise(
+    Min_Poverty_2015 = min(poverty_level_15, na.rm = TRUE),
+    Avg_Poverty_2015 = mean(poverty_level_15, na.rm = TRUE),
+    Max_Poverty_2015 = max(poverty_level_15, na.rm = TRUE)
+  )
+
+print(poverty_stats_2015)
+
+poverty_increase_by_region <- us_states_stats %>%
+  group_by(REGION) %>%
+  summarise(
+    Total_Poverty_Change = sum(poverty_level_15, na.rm = TRUE) - sum(poverty_level_10, na.rm = TRUE)
+  ) %>%
+  arrange(desc(Total_Poverty_Change)) 
+
+largest_increase_region <- poverty_increase_by_region[1, ]
+
+print(largest_increase_region)
+```
+
+E15. Create a raster from scratch with nine rows and columns and a resolution of 0.5 decimal degrees (WGS84). Fill it with random numbers. Extract the values of the four corner cells.
+
+```{r}
+library(raster)
+
+r <- raster(nrows=9, ncols=9, xmn=0, xmx=4.5, ymn=0, ymx=4.5, crs="+proj=longlat +datum=WGS84")
+
+
+set.seed(123) 
+r[] <- runif(ncell(r)) 
+
+plot(r, main="Raster with Random Values")
+
+corners <- c(r[1,1], r[1,9], r[9,1], r[9,9])
+names(corners) <- c("Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right")
+
+print(corners)
+
+```
+
+E16. What is the most common class of our example raster `ground` (hint: `modal`)?
+
+```{r}
+library(raster)
+
+values_vec <- getValues(r)
+
+value_counts <- table(values_vec)
+
+most_common_value <- names(value_counts[which.max(value_counts)])
+
+print(most_common_value)
+
+```
+
+E17. Plot the histogram and the boxplot of the `dem.tif` file from the **spDataLarge** package (`system.file("raster/dem.tif", package = "spDataLarge")`).
+
+install.packages("spDataLarge", repos = "<https://geocompr.r-universe.dev>")
+
+```{r}
+install.packages("spDataLarge", repos = "https://geocompr.r-universe.dev")
+```
+
+```{r}
+library(spDataLarge)
+library(raster)
+library(ggplot2)
+
+dem_raster_path <- system.file("raster/dem.tif", package = "spDataLarge")
+dem_raster <- raster(dem_raster_path)
+hist(dem_raster, main = "Histogram of DEM", xlab = "Elevation (m)")
+
+dem_values <- as.data.frame(getValues(dem_raster), stringsAsFactors = FALSE)
+colnames(dem_values) <- c("elevation")
+
+ggplot(dem_values, aes(x = elevation)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  labs(title = "Histogram of DEM", x = "Elevation (m)", y = "Frequency")
+
+ggplot(dem_values, aes(y = elevation)) +
+  geom_boxplot(fill = "lightblue", color = "black") +
+  labs(title = "Boxplot of DEM", x = "", y = "Elevation (m)")
+
+```
+
+E18. It was established earlier that Canterbury was the region of New Zealand containing most of the 100 highest points in the country. How many of these high points does the Canterbury region contain?
+
+```{r}
+data(nz, package = "spData")
+data(nz_height, package = "spData")
+
+highest_points <- nz_height %>% 
+  top_n(100, wt = elevation)
+
+points_in_regions <- st_join(highest_points, nz)
+
+canterbury_high_points <- points_in_regions %>% 
+  filter(Name == "Canterbury") %>% 
+  nrow()
+
+print(canterbury_high_points)
+```
+
+E19. Which region has the second highest number of `nz_height` points in, and how many does it have?
+
+```{r}
+points_in_regions <- st_join(nz_height, nz)
+
+region_counts <- points_in_regions %>%
+  group_by(Name) %>%
+  summarise(Points = n()) %>%
+  arrange(desc(Points))
+
+second_highest_region <- region_counts[2, ]
+
+print(second_highest_region)
+```
+
+E20. Generalizing the question to all regions: how many of New Zealand's 16 regions contain points which belong to the top 100 highest points in the country? Which regions?
+
+-   create a table listing these regions in order of the number of points and their name.
+
+```{r}
+top_100_heights <- nz_height %>%
+  top_n(100, wt = elevation)
+
+points_in_regions <- st_join(top_100_heights, nz)
+
+region_counts <- points_in_regions %>%
+  group_by(Name) %>%
+  summarise(Points = n()) %>%
+  arrange(desc(Points))
+
+num_regions_with_top_100 <- nrow(region_counts)
+
+regions_with_top_100 <- region_counts
+
+print(paste("Number of regions containing top 100 highest points:", num_regions_with_top_100))
+print("Regions and their count of top 100 highest points:")
+print(regions_with_top_100)
+```
+
+E21. Use `dem = rast(system.file("raster/dem.tif", package = "spDataLarge"))`, and reclassify the elevation in three classes: low (\<300), medium and high (\>500). Secondly, read the NDVI raster (`ndvi = rast(system.file("raster/ndvi.tif", package = "spDataLarge"))`) and compute the mean NDVI and the mean elevation for each altitudinal class.
+
+```{r}
+dem <- rast(system.file("raster/dem.tif", package = "spDataLarge"))
+
+reclass_matrix <- matrix(c(-Inf, 300, 1,
+                           300, 500, 2,
+                           500, Inf, 3), byrow = TRUE, ncol = 3)
+
+
+dem_reclassified <- classify(dem, rcl = reclass_matrix, include.lowest = TRUE, right = FALSE)
+
+ndvi <- rast(system.file("raster/ndvi.tif", package = "spDataLarge"))
+
+mean_ndvi_by_class <- zonal(ndvi, dem_reclassified, fun = "mean", na.rm = TRUE)
+
+mean_ndvi_by_class <- zonal(ndvi, dem_reclassified, fun = "mean", na.rm = TRUE)
+
+mean_elevation_by_class <- zonal(dem, dem_reclassified, fun = "mean", na.rm = TRUE)
+
+print("Mean NDVI by Elevation Class:")
+print(mean_ndvi_by_class)
+print("Mean Elevation by Elevation Class:")
+print(mean_elevation_by_class)
+
+```
+
+E22. Calculate the Normalized Difference Water Index (NDWI; `(green - nir)/(green + nir)`) of a Landsat image. Use the Landsat image provided by the **spDataLarge** package (`system.file("raster/landsat.tif", package = "spDataLarge")`). Also, calculate a correlation between NDVI and NDWI for this area.
+
+```{r}
+landsat_path <- system.file("raster/landsat.tif", package = "spDataLarge")
+landsat <- rast(landsat_path)
+
+print(landsat)
+```
+
+```{r}
+landsat_path <- system.file("raster/landsat.tif", package = "spDataLarge")
+landsat <- rast(landsat_path)
+
+green <- landsat[[3]]
+nir <- landsat[[4]]
+ndwi <- (green - nir) / (green + nir)
+
+red <- landsat[[2]]
+ndvi <- (nir - red) / (nir + red)
+
+ndvi_values <- values(ndvi)
+ndwi_values <- values(ndwi)
+
+valid_indices <- !is.na(ndvi_values) & !is.na(ndwi_values)
+correlation <- cor(ndvi_values[valid_indices], ndwi_values[valid_indices])
+
+print(correlation)
+```
+
+E23. We have shown how to compute distances to the nearest coastline using `raster::distance()`. Try to do something similar but with `terra::distance()`: retrieve a digital elevation model of Spain, and compute a raster which represents distances to the coast across the country (hint: use `geodata::elevation_30s()`). Convert the resulting distances from meters to kilometers. Note: it may be wise to increase the cell size of the input raster to reduce compute time during this operation.
+
+```{r}
+library(geodata)
+
+spain_extent <- extent(-10, 5, 35, 44)
+
+dem_spain <- getData('alt', country='ESP', mask=TRUE)
+
+dem_spain <- crop(dem_spain, spain_extent)
+dem_spain_resampled <- aggregate(dem_spain, fact=10) 
+
+dem_spain_terra <- rast(dem_spain_resampled)
+
+land <- ifel(dem_spain_terra > 0, 1, NA)
+
+dist_to_coast_m <- terra::distance(land)
+
+dist_to_coast_km <- dist_to_coast_m / 1000
+
+plot(dist_to_coast_km, main="Distance to Coastline in Spain (km)")
+```
+
+E24. Try to modify the approach used in the above exercise by weighting the distance raster with the elevation raster; every 100 altitudinal meters should increase the distance to the coast by 10 km. Next, compute and visualize the difference between the raster created using the Euclidean distance (E7) and the raster weighted by elevation.
+
+```{r}
+dem_spain_terra <- terra::rast(dem_spain)
+
+dem_aligned <- terra::resample(dem_spain_terra, dist_to_coast_km, method="bilinear")
+
+additional_distance_km <- (dem_aligned / 100) * 10
+
+weighted_dist_to_coast_km <- dist_to_coast_km + additional_distance_km
+
+distance_diff_km <- weighted_dist_to_coast_km - dist_to_coast_km
+
+plot(distance_diff_km, main="Difference in Distance Due to Elevation (km)")
+```
+
+### In-class exercises.
+
+E24. From Conley and Udrey (2010), we know that motivating a few farmers to use a new technology (fertilizer) is sufficient to spread the technical improvement across several farmers owning individual plots. In the dataset for this project, we have the location of each plot within a region in Ghana, that will be exposed to our public program. You need to tell me which farmers should we train to get the mos benefits. We can only select 10 farmers. Construct a 1km buffer around each point, and classify the plots inside each buffer as neighbors of such a point. Then tell me which are the 10 most central plots. Draw a map of the original points, a map of the buffers, and print the head of the neighbors' table
+
+```{r}
+
+library(here)
+library(readr)
+udry2010 <- read_csv(here("Materials","input","udry2010.csv"),show_col_types = FALSE)
+
+```
+
+```{r}
+library(here)
+here("fent_data.RData")
+
+#Here, i tried to use the data from our lectures, but since the data had many parts such as ports, i am not sure how to merge them together to use them on the questions.
+```
+
+E26 (from the lecture on `purrr`) Please complete the code below.
+
+```{r}
+
+# obtain something filling the blanks in the code below:
+
+RegDat <- list(ANZ=ANZ, _, _, _) %>%
+  map(~ filter(_, _ %in% _)) %>%
+  map(~ group_by(_, _)) %>%
+  map_df(~ summarise(_, lifeExp = mean(_), gdpPercap = mean(_)),
+         .id = "region")
+
+# explain the purppose of .id = "region"
+# epxplain what does map_df do for us above.
+
+```
+
+E26: From our lectures
+
+Now lets use `purrr::map` to compute routes for several end-start points.
+
+-   We want the user to provide a list of places and a list of of columns' names.
+
+    <div>
+
+    -   `names_list = list(c("zihuatanejo_airport","Hidalgo"),`
+
+    <!-- -->
+
+    ```         
+    `c("zihuatanejo_airport","Laredo"),`
+
+    `c("Mazatlan","Calexico East"))`
+
+    `col_names = c("Name","portname")`
+    ```
+
+    </div>
+
+-   Given the above, construct a function by completing the code below
+
+```{r}
+
+data_1 = ports
+data_2 = cross_p_mex_top
+
+list_start_end_route = function(names_list,col_names,data1,data2){
+  
+  output = purrr::map(_,~_(_ = _,
+                                                   col_names = col_names,
+                                                   data_1 = data_1,
+                                                   data_2 = data_2))
+  
+  # I want the names in the list in the format: place1.to.place2
+  
+  the_names = _(_,~paste(_,_,sep = ".to."))
+  
+  names(output) = the_names 
+  
+  return(output)
+  
+}
+
+```
+
+Use your results from above to expand `my_map` displaying all the three routes.
+
+```{r}
+
+names_list = list(c("zihuatanejo_airport","Hidalgo"),
+                  c("zihuatanejo_airport","Laredo"),
+                  c("Mazatlan","Calexico East"))
+
+
+col_names = c("Name","portname")
+
+route_list = list_start_end_route(names_list,col_names,data1,data2)
+
+my_map +
+  tm_shape(route_list$zihuatanejo_airport.to.Hidalgo) +
+  tm_lines(lwd = 2, col = "blue") + 
+  tm_shape(route_list$zihuatanejo_airport.to.Laredo) +
+  tm_lines(lwd = 2, col = "orange") +
+  tm_shape(route_list$`Mazatlan.to.Calexico East`) +
+  tm_lines(lwd = 2, col = "red")
+
+```
+
+E27: From our lectures
+
+1.  Find the **prehispanic** and **colonial points** inside each **prehispanic polygon** and count them.
+
+2.  Use `ggplot` to produce a scatter plot where the x-axis represents the number of prehispanic towns, and the y-axis refers to the number of colonial settlements.
+
+    <div>
+
+    -   The code for the plot should look like this:
+
+        `ggplot(data = your_joined_data,`
+
+        `aes(x = prehisp_towns, y =  colonial_towns))  +`
+
+        `geom_point() +`
+
+        `geom_smooth(method='lm')`
+
+    </div>
