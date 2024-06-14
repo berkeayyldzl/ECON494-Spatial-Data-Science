@@ -1,0 +1,645 @@
+---
+title: ECON494 Term Project - Brasil
+author: Group 8 - Berke Ayyıldızlı - Melih Kıltoprak - Ayşegül Güler - Demirhan İzer
+format: pdf
+---
+
+<div>
+
+In this markdown file, we will be doing EDA and plotting to further understand the public incidents that are both the causes and the results of drug trafficking and crime rate.
+
+</div>
+
+```{r}
+# Load necessary libraries
+library(readr)
+library(here)
+
+# Load the CSV file using here()
+file_path <- here("/Users/berkeayyildizli/Desktop/ECON494/TermProject/1900-01-01-2024-04-01-Brazil.csv")
+data <- read_csv(file_path)
+
+# Display the first few rows of the dataframe
+head(data)
+
+
+```
+
+```{r}
+# Display the column names of the dataframe
+colnames(data)
+
+```
+
+```{r}
+install.packages("sf")
+install.packages("ggplot2")
+
+```
+
+```{r}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Load world map data for basemap
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Convert the data to a spatial dataframe
+data_sf <- st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Plot the events on a map with a basemap
+ggplot() +
+  geom_sf(data = world, fill = "gray80", color = "white") +
+  geom_sf(data = data_sf, aes(color = event_type), alpha = 0.6, size = 0.5) +
+  coord_sf(xlim = c(-74, -34), ylim = c(-35, 5), expand = FALSE) +
+  theme_minimal() +
+  labs(title = "Crime and Drug Trafficking Events in Brazil",
+       x = "Longitude", y = "Latitude",
+       color = "Event Type") +
+  theme(legend.position = "bottom")
+
+```
+
+```{r}
+library(ggplot2)
+
+# Plot the number of events per year
+ggplot(data, aes(x = year)) +
+  geom_bar(fill = "skyblue") +
+  theme_minimal() +
+  labs(title = "Number of Events per Year",
+       x = "Year", y = "Number of Events")
+
+
+```
+
+```{r}
+# Plot the distribution of event types
+ggplot(data, aes(x = event_type)) +
+  geom_bar(fill = "lightgreen") +
+  theme_minimal() +
+  labs(title = "Distribution of Event Types",
+       x = "Event Type", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Plot the total number of fatalities by event type
+ggplot(data, aes(x = event_type, y = fatalities)) +
+  geom_bar(stat = "summary", fun = "sum", fill = "coral") +
+  theme_minimal() +
+  labs(title = "Total Fatalities by Event Type",
+       x = "Event Type", y = "Total Fatalities") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+```{r}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Load world map data for basemap
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Convert the data to a spatial dataframe
+data_sf <- st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Define Brazil's bounding box for better zoom
+brazil_bbox <- c(xmin = -74, xmax = -34, ymin = -35, ymax = 5)
+
+# Plot the fatalities on a map with a basemap and zoom into Brazil
+ggplot() +
+  geom_sf(data = world, fill = "gray80", color = "white") +
+  geom_sf(data = data_sf, aes(size = fatalities), alpha = 0.6, color = "red") +
+  coord_sf(xlim = c(brazil_bbox["xmin"], brazil_bbox["xmax"]), 
+           ylim = c(brazil_bbox["ymin"], brazil_bbox["ymax"]), 
+           expand = FALSE) +
+  theme_minimal() +
+  labs(title = "Geographic Distribution of Fatalities in Brazil",
+       x = "Longitude", y = "Latitude",
+       size = "Fatalities") +
+  theme(legend.position = "bottom")
+
+```
+
+```{r}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Load world map data for basemap
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Convert the data to a spatial dataframe
+data_sf <- st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Define Brazil's bounding box for better zoom
+brazil_bbox <- c(xmin = -74, xmax = -34, ymin = -35, ymax = 5)
+
+# Plot the density heatmap
+ggplot() +
+  geom_sf(data = world, fill = "gray80", color = "white") +
+  stat_density2d(data = as.data.frame(st_coordinates(data_sf)), 
+                 aes(x = X, y = Y, fill = ..level..), geom = "polygon", alpha = 0.5) +
+  scale_fill_viridis_c() +
+  coord_sf(xlim = c(brazil_bbox["xmin"], brazil_bbox["xmax"]), 
+           ylim = c(brazil_bbox["ymin"], brazil_bbox["ymax"]), 
+           expand = FALSE) +
+  theme_minimal() +
+  labs(title = "Heatmap of Event Density in Brazil",
+       x = "Longitude", y = "Latitude",
+       fill = "Density") +
+  theme(legend.position = "bottom")
+
+```
+
+```{r}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(dplyr)
+
+# Load world map data for basemap
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Load Brazilian states data
+brazil_states <- ne_states(country = "Brazil", returnclass = "sf")
+
+# Define the regions manually (example: North, Northeast, Central-West, Southeast, South)
+brazil_states <- brazil_states %>%
+  mutate(region = case_when(
+    name %in% c("Acre", "Amapá", "Amazonas", "Pará", "Rondônia", "Roraima", "Tocantins") ~ "North",
+    name %in% c("Alagoas", "Bahia", "Ceará", "Maranhão", "Paraíba", "Pernambuco", "Piauí", "Rio Grande do Norte", "Sergipe") ~ "Northeast",
+    name %in% c("Distrito Federal", "Goiás", "Mato Grosso", "Mato Grosso do Sul") ~ "Central-West",
+    name %in% c("Espírito Santo", "Minas Gerais", "Rio de Janeiro", "São Paulo") ~ "Southeast",
+    name %in% c("Paraná", "Rio Grande do Sul", "Santa Catarina") ~ "South",
+    TRUE ~ "Other"
+  ))
+
+# Filter regions (example criteria)
+north_states <- brazil_states %>% filter(region == "North")
+northeast_states <- brazil_states %>% filter(region == "Northeast")
+centralwest_states <- brazil_states %>% filter(region == "Central-West")
+southeast_states <- brazil_states %>% filter(region == "Southeast")
+south_states <- brazil_states %>% filter(region == "South")
+
+# Combine the datasets
+selected_states <- bind_rows(north_states, northeast_states, centralwest_states, southeast_states, south_states)
+
+```
+
+```{r}
+# Plot the regions of Brazil
+ggplot(data = selected_states) +
+  geom_sf(aes(fill = region), show.legend = "point") + 
+  scale_fill_manual(values = c("North" = "blue", "Northeast" = "green", "Central-West" = "yellow", "Southeast" = "red", "South" = "purple")) +
+  labs(title = "Brazilian States by Region", 
+       fill = "Region") +
+  theme_minimal()
+
+```
+
+```{r}
+# Plot the geometry of the brazil_states
+plot(brazil_states$geometry)
+
+```
+
+```{r}
+
+
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Load world map data for basemap
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Convert the data to a spatial dataframe
+data_sf <- st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Define Brazil's bounding box for better zoom
+brazil_bbox <- c(xmin = -74, xmax = -34, ymin = -35, ymax = 5)
+
+# Plot all events on the Brazil map for each year
+ggplot() +
+  geom_sf(data = world, fill = "gray80", color = "white") +
+  geom_sf(data = data_sf, aes(color = event_type), alpha = 0.6, size = 0.5) +
+  coord_sf(xlim = c(brazil_bbox["xmin"], brazil_bbox["xmax"]), 
+           ylim = c(brazil_bbox["ymin"], brazil_bbox["ymax"]), 
+           expand = FALSE) +
+  theme_minimal() +
+  labs(title = "Crime and Drug Trafficking Events in Brazil by Year",
+       x = "Longitude", y = "Latitude",
+       color = "Event Type") +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ year)
+
+
+```
+
+```{r}
+library(tmap)
+library(dplyr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Set tmap options to check and fix invalid polygons
+tmap_options(check.and.fix = TRUE)
+
+# Load world map data for basemap
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Load Brazilian states data for basemap
+brazil_states <- ne_states(country = "Brazil", returnclass = "sf")
+
+# Convert the data to a spatial dataframe
+data_sf <- st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Filter the data for the desired years
+data_filtered <- data_sf %>% filter(year %in% 2018:2024)
+
+# Define Brazil's bounding box for better zoom
+brazil_bbox <- st_bbox(brazil_states)
+
+# Create the tmap object with facets by year and remove the legend
+my_map <- tm_shape(brazil_states) +
+  tm_borders(col = "gray80", lwd = 0.5) +
+  tm_shape(data_filtered) +
+  tm_dots(col = "event_type", size = 0.5, alpha = 0.6, palette = "Set1", title = "Event Type") +
+  tm_facets(along = "year", free.coords = FALSE) +
+  tm_layout(title = "Crime and Drug Trafficking Events in Brazil",
+            legend.show = FALSE)  # Remove the legend
+
+# Create and save the animation
+tmap_animation(my_map, filename = "Brazil_Events_2018_2024.gif", delay = 200, width = 800, height = 600)
+
+
+```
+
+```{r}
+library(tmap)
+library(dplyr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Set tmap options to check and fix invalid polygons
+tmap_options(check.and.fix = TRUE)
+
+# Load world map data for basemap
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Load Brazilian states data for basemap
+brazil_states <- ne_states(country = "Brazil", returnclass = "sf")
+
+# Convert the data to a spatial dataframe
+data_sf <- st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Filter the data for events with "drug" in the notes column
+data_drug <- data_sf %>% filter(grepl("drug", notes, ignore.case = TRUE))
+
+# Define Brazil's bounding box for better zoom
+brazil_bbox <- st_bbox(brazil_states)
+
+# Create the tmap object to plot events with "drug" keyword
+drug_map <- tm_shape(brazil_states) +
+  tm_borders(col = "gray80", lwd = 0.5) +
+  tm_shape(data_drug) +
+  tm_dots(col = "event_type", size = 0.2, alpha = 0.6, palette = "Set1", title = "Event Type") +
+  tm_layout(title = "Events Related to Drugs in Brazil",
+            legend.show = FALSE)  # Remove the legend
+
+# Switch to plotting mode and plot the map
+tmap_mode("plot")
+print(drug_map)
+
+```
+
+```{r}
+# Filter for drug-related events
+drug_data <- data %>% filter(grepl("drug", notes, ignore.case = TRUE))
+drug_data_sf <- st_as_sf(drug_data, coords = c("longitude", "latitude"), crs = 4326)
+
+```
+
+```{r}
+# Load Brazilian states data for basemap
+brazil_states <- ne_states(country = "Brazil", returnclass = "sf")
+
+# Create the tmap object to plot drug-related events
+drug_map <- tm_shape(brazil_states) +
+  tm_borders(col = "gray80", lwd = 0.5) +
+  tm_shape(drug_data_sf) +
+  tm_dots(col = "event_type", size = 0.2, alpha = 0.6, palette = "Set1", title = "Event Type") +
+  tm_layout(title = "Geographic Distribution of Drug-Related Events in Brazil",
+            legend.show = TRUE)
+
+# Display the map
+tmap_mode("plot")
+print(drug_map)
+
+```
+
+```{r}
+library(dplyr)
+library(readr)
+
+# Load the data
+data <- read_csv("/Users/berkeayyildizli/Desktop/ECON494/TermProject/1900-01-01-2024-04-01-Brazil.csv")
+
+# Check the dimensions of the data
+print(paste("Total number of rows in the data: ", nrow(data)))
+
+# Filter the data for events with "drug" in the notes column
+data_drug <- data %>% filter(grepl("drug", notes, ignore.case = TRUE))
+
+# Calculate the number of drug-related events
+num_drug_events <- nrow(data_drug)
+
+# Calculate the total number of events
+total_events <- nrow(data)
+
+# Calculate the percentage of drug-related events
+percentage_drug_events <- (num_drug_events / total_events) * 100
+
+# Print the results
+print(paste("Number of drug-related events: ", num_drug_events))
+print(paste("Total number of events: ", total_events))
+print(paste("Percentage of drug-related events: ", round(percentage_drug_events, 2), "%"))
+
+```
+
+```{r}
+# Plot the number of drug-related events per year
+ggplot(drug_data, aes(x = year)) +
+  geom_bar(fill = "skyblue") +
+  theme_minimal() +
+  labs(title = "Number of Drug-Related Events per Year",
+       x = "Year", y = "Number of Events")
+
+```
+
+```{r}
+# Plot the distribution of event types for drug-related events
+ggplot(drug_data, aes(x = event_type)) +
+  geom_bar(fill = "lightgreen") +
+  theme_minimal() +
+  labs(title = "Distribution of Event Types in Drug-Related Events",
+       x = "Event Type", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Plot the total number of fatalities by event type for drug-related events
+ggplot(drug_data, aes(x = event_type, y = fatalities)) +
+  geom_bar(stat = "summary", fun = "sum", fill = "coral") +
+  theme_minimal() +
+  labs(title = "Total Fatalities by Event Type in Drug-Related Events",
+       x = "Event Type", y = "Total Fatalities") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Filter for non-drug-related crime events
+non_drug_data <- data %>% filter(!grepl("drug", notes, ignore.case = TRUE))
+non_drug_data_sf <- st_as_sf(non_drug_data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Create the tmap object to plot non-drug-related crime events
+crime_map <- tm_shape(brazil_states) +
+  tm_borders(col = "gray80", lwd = 0.5) +
+  tm_shape(non_drug_data_sf) +
+  tm_dots(col = "event_type", size = 0.2, alpha = 0.6, palette = "Set1", title = "Event Type") +
+  tm_layout(title = "Geographic Distribution of Non-Drug-Related Crime Events in Brazil",
+            legend.show = TRUE)
+
+# Display the map
+tmap_mode("plot")
+print(crime_map)
+
+```
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(tmap)
+
+# Load data
+data <- read_csv("/Users/berkeayyildizli/Desktop/ECON494/TermProject/1900-01-01-2024-04-01-Brazil.csv")
+
+# Convert the data to a spatial dataframe
+data_sf <- st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Filter for drug-related events
+drug_data <- data %>% filter(grepl("drug", notes, ignore.case = TRUE))
+drug_data_sf <- st_as_sf(drug_data, coords = c("longitude", "latitude"), crs = 4326)
+
+
+```
+
+```{r}
+# Plot the frequency of primary actors in drug-related events
+ggplot(drug_data, aes(x = actor1)) +
+  geom_bar(fill = "dodgerblue") +
+  theme_minimal() +
+  labs(title = "Frequency of Primary Actors in Drug-Related Events",
+       x = "Primary Actor", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+
+```
+
+```{r}
+# Top 10 primary actors
+top_actors1 <- drug_data %>%
+  group_by(actor1) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  slice(1:10)
+
+# Plot top 10 primary actors
+ggplot(top_actors1, aes(x = reorder(actor1, count), y = count)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  theme_minimal() +
+  labs(title = "Top 10 Primary Actors in Drug-Related Events",
+       x = "Primary Actor", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10))
+
+```
+
+```{r}
+# Plot the frequency of secondary actors in drug-related events
+ggplot(drug_data, aes(x = actor2)) +
+  geom_bar(fill = "tomato") +
+  theme_minimal() +
+  labs(title = "Frequency of Secondary Actors in Drug-Related Events",
+       x = "Secondary Actor", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+
+```
+
+```{r}
+# Top 10 secondary actors
+top_actors2 <- drug_data %>%
+  group_by(actor2) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  slice(1:10)
+
+# Plot top 10 secondary actors
+ggplot(top_actors2, aes(x = reorder(actor2, count), y = count)) +
+  geom_bar(stat = "identity", fill = "lightcoral") +
+  theme_minimal() +
+  labs(title = "Top 10 Secondary Actors in Drug-Related Events",
+       x = "Secondary Actor", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10))
+
+```
+
+```{r}
+# Most common actor pairs
+actor_pairs <- drug_data %>%
+  filter(!is.na(actor1) & !is.na(actor2)) %>%
+  group_by(actor1, actor2) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  slice(1:10)
+
+# Plot the most common actor pairs
+ggplot(actor_pairs, aes(x = reorder(paste(actor1, "and", actor2), count), y = count)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  theme_minimal() +
+  labs(title = "Most Common Actor Pairs in Drug-Related Events",
+       x = "Actor Pair", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10))
+
+```
+
+```{r}
+# Most common actor pairs
+actor_pairs <- drug_data %>%
+  filter(!is.na(actor1) & !is.na(actor2)) %>%
+  group_by(actor1, actor2) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  slice(1:10)
+
+# Print the top 10 most common actor pairs
+print(actor_pairs)
+
+# Plot the most common actor pairs
+ggplot(actor_pairs, aes(x = reorder(paste(actor1, "and", actor2), count), y = count)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  theme_minimal() +
+  labs(title = "Top 10 Most Common Actor Pairs in Drug-Related Events",
+       x = "Actor Pair", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10))
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Assuming `drug_data` is already filtered for drug-related events
+
+# Calculate the top 10 most common actor pairs
+top_actor_pairs <- drug_data %>%
+  filter(!is.na(actor1) & !is.na(actor2)) %>%
+  group_by(actor1, actor2) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  arrange(desc(count)) %>%
+  slice(1:10)
+
+# Print the top 10 most common actor pairs
+print(top_actor_pairs)
+
+# Plot the most common actor pairs
+ggplot(top_actor_pairs, aes(x = reorder(paste(actor1, "and", actor2), count), y = count)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  theme_minimal() +
+  labs(title = "Top 10 Most Common Actor Pairs in Drug-Related Events",
+       x = "Actor Pair", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10))
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(tmap)
+
+# Load data
+data <- read_csv("/Users/berkeayyildizli/Desktop/ECON494/TermProject/1900-01-01-2024-04-01-Brazil.csv")
+
+# Convert the data to a spatial dataframe
+data_sf <- st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+# Filter for drug-related events
+drug_data <- data %>% filter(grepl("drug", notes, ignore.case = TRUE))
+drug_data_sf <- st_as_sf(drug_data, coords = c("longitude", "latitude"), crs = 4326)
+
+```
+
+```{r}
+# Plot the distribution of source scales in drug-related events
+ggplot(drug_data, aes(x = source_scale)) +
+  geom_bar(fill = "darkorange") +
+  theme_minimal() +
+  labs(title = "Distribution of Source Scales in Drug-Related Events",
+       x = "Source Scale", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Plot the distribution of source scales by event type
+ggplot(drug_data, aes(x = source_scale, fill = event_type)) +
+  geom_bar(position = "dodge") +
+  theme_minimal() +
+  labs(title = "Source Scale Distribution by Event Type in Drug-Related Events",
+       x = "Source Scale", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Get top 10 primary actors
+top_actors1 <- drug_data %>%
+  group_by(actor1) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  slice(1:10) %>%
+  pull(actor1)
+
+# Filter data for top 10 primary actors
+top_actors1_data <- drug_data %>% filter(actor1 %in% top_actors1)
+
+# Plot the distribution of source scales by top 10 primary actors
+ggplot(top_actors1_data, aes(x = source_scale, fill = actor1)) +
+  geom_bar(position = "dodge") +
+  theme_minimal() +
+  labs(title = "Source Scale Distribution by Top 10 Primary Actors in Drug-Related Events",
+       x = "Source Scale", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_discrete(name = "Primary Actor")
+
+```
