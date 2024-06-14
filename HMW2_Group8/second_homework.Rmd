@@ -1,0 +1,286 @@
+---
+title: ECON494 - Homework 2
+author: Berke Ayyildizli - Melih Kiltoprak - Demirhan Izer - Aysegul Guler
+---
+
+1.  Run the following code to install or load (if already installed) the pacman package, and then install or load (if already installed) the listed package inside the pacman::p_load() function.
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+  sf,       # vector data operations
+  dplyr,    # data wrangling
+  ggplot2,  # for map creation
+  modelsummary, # regression table generation
+  patchwork # arrange multiple plots
+)
+
+```
+
+Run the following code to define the theme for maps:
+
+```{r}
+theme_for_map <- 
+  theme(
+    axis.ticks = element_blank(),
+    axis.text = element_blank(),
+    axis.line = element_blank(),
+    panel.border = element_blank(),
+    panel.grid = element_line(color = "transparent"),
+    panel.background = element_blank(),
+    plot.background = element_rect(fill = "transparent", color = "transparent")
+  )
+
+```
+
+•Read in trial_design.rds .
+
+```{r}
+library(sf)
+
+trial_design <- readRDS("HMW2_data/trial_design.rds")
+str(trial_design)
+```
+
+•The above dataset contains the nitrogen rates across aerial units. Please create a map showing the spatial distribution of the variable NRATE .
+
+```{r}
+library(ggplot2)
+
+
+custom_palette <- c("#fef0d9", "#fdcc8a", "#fc8d59", "#e34a33", "#b30000")
+
+ggplot(trial_design) +
+  geom_sf(aes(fill = NRATE)) +
+  scale_fill_gradientn(colors = custom_palette) +
+  ggtitle("Spatial Distribution of NRATE") +
+  theme_for_map
+
+
+```
+
+•Now, read in the information concerning the “as applied nitrogen” (NH3.gpkg), “electric conductivity” (ec.shp), and “collected yield.” (yield.rds) . To do so, you will have to eomply st_read() and readRDS .
+
+```{r}
+library(sf)
+
+nh3_data <- st_read("HMW2_data/NH3.gpkg")
+ec_data <- st_read("HMW2_data/ec.shp")
+yield_data <- readRDS("HMW2_data/yield.rds")
+
+str(nh3_data)
+str(ec_data)
+str(yield_data)
+
+```
+
+•Create a figure showing the spatial distribution of the three variables. First create a map of each variable, and then combine them into one figure using the patchwork package
+
+–To stack the figures vertically, label each individual figure as g_yield, g_NH3, and g_ec.
+
+–Then write: g_yield / g_NH3 / g_ec
+
+```{r}
+library(ggplot2)
+library(sf)
+library(patchwork)
+
+
+nh3_data <- st_read("HMW2_data/NH3.gpkg")
+ec_data <- st_read("HMW2_data/ec.shp")
+yield_data <- readRDS("HMW2_data/yield.rds")
+
+color_palette <- c("#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#bd0026", "#800026")
+
+
+g_yield <- ggplot(yield_data) +
+  geom_sf(aes(color = yield)) +
+  scale_color_gradientn(colors = color_palette) +
+  ggtitle("Spatial Distribution of Yield") +
+  theme_for_map
+
+g_NH3 <- ggplot(nh3_data) +
+  geom_sf(aes(color = aa_NH3)) +
+  scale_color_gradientn(colors = color_palette) +
+  ggtitle("Spatial Distribution of NH3") +
+  theme_for_map
+
+g_ec <- ggplot(ec_data) +
+  geom_sf(aes(color = ec)) +
+  scale_color_gradientn(colors = color_palette) +
+  ggtitle("Spatial Distribution of EC") +
+  theme_for_map
+
+combined_plot <- g_yield / g_NH3 / g_ec
+
+print(combined_plot)
+
+```
+
+•Instead of using plot as the observation unit (the term “plot” refers to a piece of land), we would like to create subplots inside each of the plots and make them the unit of analysis. This will avoid hiding the within-plot spatial heterogeneity of EC. Please divide each plot into six subplots.
+
+•Create a figure displaying the subplots.
+
+```{r}
+library(sf)
+library(dplyr)
+library(ggplot2)
+
+create_subplots <- function(plot_geometry) {
+  plot_bbox <- st_bbox(plot_geometry)
+  width <- (plot_bbox$xmax - plot_bbox$xmin) / 3
+  height <- (plot_bbox$ymax - plot_bbox$ymin) / 2
+  
+  subplots <- list()
+  for (i in 0:2) {
+    for (j in 0:1) {
+      xmin <- plot_bbox$xmin + i * width
+      xmax <- xmin + width
+      ymin <- plot_bbox$ymin + j * height
+      ymax <- ymin + height
+      subplot <- st_polygon(list(rbind(
+        c(xmin, ymin),
+        c(xmin, ymax),
+        c(xmax, ymax),
+        c(xmax, ymin),
+        c(xmin, ymin)
+      )))
+      subplots <- c(subplots, st_sfc(subplot, crs = st_crs(plot_geometry)))
+    }
+  }
+  return(subplots)
+}
+
+subplots_list <- do.call(c, lapply(st_geometry(trial_design), create_subplots))
+subplots_sf <- st_sf(geometry = st_sfc(subplots_list, crs = st_crs(trial_design)))
+
+ggplot(subplots_sf) +
+  geom_sf() +
+  ggtitle("Subplots within Each Plot") +
+  theme_for_map
+
+```
+
+•Now identify the mean value of corn yield, nitrogen rate, and EC for each of the subplots using sf::aggregate() and sf::st_join().
+
+```{r}
+library(sf)
+library(dplyr)
+library(ggplot2)
+
+create_subplots <- function(plot_geometry) {
+  plot_bbox <- st_bbox(plot_geometry)
+  width <- (plot_bbox$xmax - plot_bbox$xmin) / 3
+  height <- (plot_bbox$ymax - plot_bbox$ymin) / 2
+  
+  subplots <- list()
+  for (i in 0:2) {
+    for (j in 0:1) {
+      xmin <- plot_bbox$xmin + i * width
+      xmax <- xmin + width
+      ymin <- plot_bbox$ymin + j * height
+      ymax <- ymin + height
+      subplot <- st_polygon(list(rbind(
+        c(xmin, ymin),
+        c(xmin, ymax),
+        c(xmax, ymax),
+        c(xmax, ymin),
+        c(xmin, ymin)
+      )))
+      subplots <- c(subplots, st_sfc(subplot, crs = st_crs(plot_geometry)))
+    }
+  }
+  return(subplots)
+}
+
+subplots_list <- do.call(c, lapply(st_geometry(trial_design), create_subplots))
+subplots_sf <- st_sf(geometry = st_sfc(subplots_list, crs = st_crs(trial_design)))
+
+subplots_sf$id <- 1:nrow(subplots_sf)
+
+yield_subplots <- st_join(subplots_sf, yield_data)
+
+nh3_subplots <- st_join(subplots_sf, nh3_data)
+
+ec_subplots <- st_join(subplots_sf, ec_data)
+
+mean_yield <- aggregate(yield_subplots["yield"], by = list(yield_subplots$id), FUN = mean)
+mean_yield <- st_as_sf(mean_yield, geometry = subplots_sf$geometry[mean_yield$Group.1])
+mean_nh3 <- aggregate(nh3_subplots["aa_NH3"], by = list(nh3_subplots$id), FUN = mean)
+mean_nh3 <- st_as_sf(mean_nh3, geometry = subplots_sf$geometry[mean_nh3$Group.1])
+mean_ec <- aggregate(ec_subplots["ec"], by = list(ec_subplots$id), FUN = mean)
+mean_ec <- st_as_sf(mean_ec, geometry = subplots_sf$geometry[mean_ec$Group.1])
+
+mean_values <- subplots_sf %>%
+  st_join(mean_yield, join = st_within) %>%
+  st_join(mean_nh3, join = st_within) %>%
+  st_join(mean_ec, join = st_within)
+
+print(mean_values)
+
+
+```
+
+•Provide a visualization of the subplot-level data.
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+custom_palette <- c("#fef0d9", "#fdcc8a", "#fc8d59", "#e34a33", "#b30000")
+
+g_mean_yield <- ggplot(mean_values) +
+  geom_sf(aes(fill = yield)) +
+  scale_fill_gradientn(colors = custom_palette) +
+  ggtitle("Mean Yield per Subplot") +
+  theme_for_map
+
+g_mean_nh3 <- ggplot(mean_values) +
+  geom_sf(aes(fill = aa_NH3)) +
+  scale_fill_gradientn(colors = custom_palette) +
+  ggtitle("Mean NH3 per Subplot") +
+  theme_for_map
+
+g_mean_ec <- ggplot(mean_values) +
+  geom_sf(aes(fill = ec)) +
+  scale_fill_gradientn(colors = custom_palette) +
+  ggtitle("Mean EC per Subplot") +
+  theme_for_map
+
+combined_plot <- g_mean_yield / g_mean_nh3 / g_mean_ec
+
+print(combined_plot)
+
+```
+
+•Now you should be able to run a regression model.
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+custom_palette <- c("#fef0d9", "#fdcc8a", "#fc8d59", "#e34a33", "#b30000")
+
+regression_data <- mean_values %>%
+  filter(!is.na(yield) & !is.na(aa_NH3) & !is.na(ec))
+
+model <- lm(yield ~ aa_NH3 + ec, data = regression_data)
+
+summary(model)
+
+plot_aa_NH3 <- ggplot(regression_data, aes(x = aa_NH3, y = yield)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  ggtitle("Yield vs. NH3") +
+  theme_minimal()
+
+plot_ec <- ggplot(regression_data, aes(x = ec, y = yield)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  ggtitle("Yield vs. EC") +
+  theme_minimal()
+
+print(plot_aa_NH3)
+print(plot_ec)
+
+```
